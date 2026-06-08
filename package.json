@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "description": "Root configuration for Siri Traders serverless backend",
   "main": "api/index.js",
   "scripts": {

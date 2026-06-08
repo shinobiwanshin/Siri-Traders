@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -14,20 +14,22 @@ import Navbar from "./components/Navbar";
 import BottomNav from "./components/BottomNav";
 import ScrollControls from "./components/ScrollControls";
 import CartSummaryBar from "./components/CartSummaryBar";
+import Loading from "./components/Loading";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
-import AdminLogin from "./pages/AdminLogin";
 import Home from "./pages/Home/index.jsx";
-import Categories from "./pages/Categories";
-import TodaysDeals from "./pages/TodaysDeals";
-import Bestsellers from "./pages/Bestsellers";
-import FestiveOffers from "./pages/FestiveOffers";
-import ProductDetail from "./pages/ProductDetail";
-import Cart from "./pages/Cart";
-import Checkout from "./pages/Checkout";
-import Orders from "./pages/Orders";
-import Profile from "./pages/Profile";
-import Admin from "./pages/Admin";
+
+const AdminLogin = lazy(() => import("./pages/AdminLogin"));
+const Categories = lazy(() => import("./pages/Categories"));
+const TodaysDeals = lazy(() => import("./pages/TodaysDeals"));
+const Bestsellers = lazy(() => import("./pages/Bestsellers"));
+const FestiveOffers = lazy(() => import("./pages/FestiveOffers"));
+const ProductDetail = lazy(() => import("./pages/ProductDetail"));
+const Cart = lazy(() => import("./pages/Cart"));
+const Checkout = lazy(() => import("./pages/Checkout"));
+const Orders = lazy(() => import("./pages/Orders"));
+const Profile = lazy(() => import("./pages/Profile"));
+const Admin = lazy(() => import("./pages/Admin"));
 import "./App.css";
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -51,24 +53,26 @@ const AppLayout = () => {
       {!isAuthPage && <Navbar />}
       {!isAuthPage && <ScrollControls />}
       <main className="app__main">
-        <Routes>
-          <Route path="/" element={<Navigate to="/home" replace />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/admin-login" element={<AdminLogin />} />
-          <Route path="/home" element={<Home />} />
-          <Route path="/categories" element={<Categories />} />
-          <Route path="/todays-deals" element={<TodaysDeals />} />
-          <Route path="/bestsellers" element={<Bestsellers />} />
-          <Route path="/festive-offers" element={<FestiveOffers />} />
-          <Route path="/product/:id" element={<ProductDetail />} />
-          <Route path="/cart" element={<Cart />} />
-          <Route path="/checkout" element={<Checkout />} />
-          <Route path="/orders" element={<Orders />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="*" element={<Navigate to="/home" replace />} />
-        </Routes>
+        <Suspense fallback={<Loading />}>
+          <Routes>
+            <Route path="/" element={<Navigate to="/home" replace />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/admin-login" element={<AdminLogin />} />
+            <Route path="/home" element={<Home />} />
+            <Route path="/categories" element={<Categories />} />
+            <Route path="/todays-deals" element={<TodaysDeals />} />
+            <Route path="/bestsellers" element={<Bestsellers />} />
+            <Route path="/festive-offers" element={<FestiveOffers />} />
+            <Route path="/product/:id" element={<ProductDetail />} />
+            <Route path="/cart" element={<Cart />} />
+            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/orders" element={<Orders />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/admin" element={<Admin />} />
+            <Route path="*" element={<Navigate to="/home" replace />} />
+          </Routes>
+        </Suspense>
       </main>
       {!isAuthPage && <BottomNav />}
       {!isAuthPage && <CartSummaryBar />}
