@@ -2266,7 +2266,7 @@ export const baseProducts = [
   }
 ];
 
-const ADMIN_PRODUCTS_KEY = 'siri-admin-products';
+export const ADMIN_PRODUCTS_KEY = 'siri-admin-products';
 
 const readAdminProducts = () => {
   if (typeof localStorage === 'undefined') return null;

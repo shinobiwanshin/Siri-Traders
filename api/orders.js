@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { createClerkClient } from '@clerk/backend';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
+import { setCorsHeaders } from './_cors.js';
 
 const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
 
@@ -18,9 +19,7 @@ const ratelimit = new Ratelimit({
 });
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  setCorsHeaders(req, res);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -63,7 +62,7 @@ export default async function handler(req, res) {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       const { items, total, deliveryAddress, paymentMethod } = body;
 
-      if (!items || !items.length || !total) {
+      if (!Array.isArray(items) || items.length === 0 || !total) {
         return res.status(400).json({ error: 'Missing order details' });
       }
 
@@ -74,7 +73,6 @@ export default async function handler(req, res) {
           total,
           deliveryAddress: deliveryAddress || '',
           paymentMethod: paymentMethod || 'COD',
-          createdAt: new Date().toISOString(),
           status: 'Paid'
         }).returning();
 

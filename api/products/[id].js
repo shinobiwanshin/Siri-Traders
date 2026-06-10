@@ -20,7 +20,12 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing product ID' });
     }
 
-    const result = await db.select().from(products).where(eq(products.id, parseInt(id)));
+    const parsedId = parseInt(id, 10);
+    if (Number.isNaN(parsedId) || parsedId <= 0) {
+      return res.status(400).json({ error: 'Invalid product ID' });
+    }
+
+    const result = await db.select().from(products).where(eq(products.id, parsedId));
     if (!result.length) {
       return res.status(404).json({ error: 'Product not found' });
     }

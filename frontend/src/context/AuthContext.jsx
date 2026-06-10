@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect } from 'react';
+import { useUser, useClerk, useAuth as useClerkAuth } from '@clerk/clerk-react';
 
 const AuthContext = createContext();
 const ACCOUNTS_KEY = 'siri-traders-accounts';
@@ -27,7 +28,6 @@ export const useAuth = () => {
   return context;
 };
 
-import { useUser, useClerk, useAuth as useClerkAuth } from '@clerk/clerk-react';
 
 const ClerkAuthProvider = ({ children }) => {
   const { user: clerkUser, isLoaded } = useUser();
@@ -65,7 +65,7 @@ const ClerkAuthProvider = ({ children }) => {
     email: clerkUser.primaryEmailAddress?.emailAddress || '',
     phone: clerkUser.primaryPhoneNumber?.phoneNumber || '',
     avatar: clerkUser.imageUrl || null,
-    isAdmin: clerkUser.primaryEmailAddress?.emailAddress?.toLowerCase().includes('admin') || false
+    isAdmin: clerkUser.publicMetadata?.role === 'admin' || false
   } : null;
 
   const logout = () => signOut();

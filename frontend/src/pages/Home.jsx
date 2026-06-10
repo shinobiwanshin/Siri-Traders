@@ -20,7 +20,7 @@ import { useCart } from '../context/CartContext';
 import { useProducts } from '../context/ProductContext';
 import { categories } from '../data/categories';
 import { getDailyOffers, getFestivalOffers } from '../data/offers';
-import { baseProducts } from '../data/products';
+
 import { formatPrice } from '../utils/format';
 import { toWebpImage } from '../utils/images';
 import './Home.css';

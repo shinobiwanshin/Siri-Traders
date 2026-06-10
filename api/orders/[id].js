@@ -1,13 +1,12 @@
 import { db, orders, orderItems } from '../../db/index.js';
 import { eq, and } from 'drizzle-orm';
 import { createClerkClient } from '@clerk/backend';
+import { setCorsHeaders } from '../_cors.js';
 
 const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  setCorsHeaders(req, res);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -37,8 +36,13 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing order ID' });
     }
 
+    const parsedId = parseInt(id, 10);
+    if (Number.isNaN(parsedId) || parsedId <= 0) {
+      return res.status(400).json({ error: 'Invalid order ID' });
+    }
+
     // 2. Fetch order
-    const orderResult = await db.select().from(orders).where(eq(orders.id, parseInt(id)));
+    const orderResult = await db.select().from(orders).where(eq(orders.id, parsedId));
     if (!orderResult.length) {
       return res.status(404).json({ error: 'Order not found' });
     }

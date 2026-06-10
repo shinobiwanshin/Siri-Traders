@@ -17,20 +17,38 @@ const Orders = () => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated && getToken) {
-      setLoading(true);
-      getToken().then(token => {
-        fetch('/api/orders', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-          .then(res => res.ok ? res.json() : [])
-          .then(data => {
-            setDbOrders(data);
-          })
-          .catch(err => console.error("Error fetching database orders:", err))
-          .finally(() => setLoading(false));
-      });
-    }
+    let active = true;
+    const fetchDbOrders = async () => {
+      if (isAuthenticated && getToken) {
+        setLoading(true);
+        try {
+          const token = await getToken();
+          const res = await fetch('/api/orders', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (active) {
+              setDbOrders(data);
+            }
+          } else {
+            if (active) {
+              setDbOrders([]);
+            }
+          }
+        } catch (err) {
+          console.error("Error fetching database orders:", err);
+        } finally {
+          if (active) {
+            setLoading(false);
+          }
+        }
+      }
+    };
+    fetchDbOrders();
+    return () => {
+      active = false;
+    };
   }, [isAuthenticated, getToken]);
 
   const localOrders = useMemo(() => {

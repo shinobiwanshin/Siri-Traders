@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { baseProducts, toWholesaleProduct, mergeCatalog } from '../data/products';
+import { baseProducts, toWholesaleProduct, mergeCatalog, ADMIN_PRODUCTS_KEY } from '../data/products';
+import { useAuth } from './AuthContext';
 
 const ProductContext = createContext();
 
@@ -14,6 +15,7 @@ export const useProducts = () => {
 export const ProductProvider = ({ children }) => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { getToken } = useAuth();
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -40,7 +42,7 @@ export const ProductProvider = ({ children }) => {
 
   const getProductsForType = (customerType = 'retail') => {
     // Read local admin products (if any exist in local storage)
-    const saved = localStorage.getItem('siri-traders-admin-products');
+    const saved = localStorage.getItem(ADMIN_PRODUCTS_KEY);
     const adminProducts = saved ? JSON.parse(saved) : [];
     
     if (customerType === 'wholesale') {
@@ -52,9 +54,16 @@ export const ProductProvider = ({ children }) => {
 
   const addProduct = async (productData) => {
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (getToken) {
+        const token = await getToken();
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+      }
       const res = await fetch('/api/products', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(productData)
       });
       if (res.ok) {

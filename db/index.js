@@ -10,6 +10,10 @@ import { users } from './schema/users.js';
 
 dotenv.config();
 
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL environment variable is required but missing from configuration.");
+}
+
 const schema = {
   products,
   categories,

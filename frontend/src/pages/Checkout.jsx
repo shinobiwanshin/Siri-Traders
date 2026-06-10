@@ -48,7 +48,7 @@ const Checkout = () => {
   const [showItems, setShowItems] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [placedAddress, setPlacedAddress] = useState(null);
-  const [orderId] = useState(() => `ORD-${Date.now().toString().slice(-6)}`);
+  const [orderId, setOrderId] = useState(() => `ORD-${Date.now().toString().slice(-6)}`);
   const [addresses, setAddresses] = useState(() => getSavedAddresses(user));
   const [selectedAddressId, setSelectedAddressId] = useState(() => getSavedAddresses(user)[0]?.id || '');
   const [showAddressForm, setShowAddressForm] = useState(() => getSavedAddresses(user).length === 0);
@@ -156,6 +156,7 @@ const Checkout = () => {
       unit: item.unit || ''
     }));
 
+    let finalOrderId = orderId;
     if (getToken) {
       try {
         const token = await getToken();
@@ -199,13 +200,21 @@ const Checkout = () => {
           alert(errData.error || 'Failed to place order');
           return;
         }
+
+        const createdOrder = await orderRes.json();
+        if (createdOrder && createdOrder.id) {
+          finalOrderId = createdOrder.id;
+          setOrderId(createdOrder.id);
+        }
       } catch (err) {
         console.error("API error during checkout/order placement:", err);
+        alert('An error occurred during checkout. Please try again.');
+        return;
       }
     }
 
     const order = {
-      id: orderId,
+      id: finalOrderId,
       date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
       status: selectedPayment === 'cod' ? 'preparing' : 'paid',
       deliveryTime: timeSlots.find(s => s.id === selectedSlot)?.label || '10 mins',

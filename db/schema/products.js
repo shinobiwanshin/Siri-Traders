@@ -1,9 +1,10 @@
 import { pgTable, serial, text, integer, boolean, jsonb } from 'drizzle-orm/pg-core';
+import { categories } from './categories.js';
 
 export const products = pgTable('products', {
   id: serial('id').primaryKey(),
   name: text('name').notNull(),
-  category: text('category').notNull(),
+  category: text('category').references(() => categories.id).notNull(),
   brand: text('brand'),
   weight: text('weight'),
   unit: text('unit'),
