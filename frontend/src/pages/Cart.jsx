@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { FiMinus, FiPlus, FiTrash2, FiTag, FiArrowLeft, FiShoppingBag, FiCheck } from 'react-icons/fi';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import { getBestsellers } from '../data/products';
+import { useProducts } from '../context/ProductContext';
+
 import ProductCard from '../components/ProductCard';
 import { formatPrice } from '../utils/format';
 import { getUserStorageKey } from '../utils/userStorage';
@@ -42,6 +43,7 @@ const getAdminCoupons = () => {
 const Cart = () => {
   const { cartItems, updateQuantity, removeFromCart, cartTotal, cartSavings, cartCount, requireAuth } = useCart();
   const { user, customerType } = useAuth();
+  const { getBestsellers } = useProducts();
   const navigate = useNavigate();
   const [coupon, setCoupon] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState(null);

@@ -22,7 +22,7 @@ export const ProductProvider = ({ children }) => {
     setLoading(true);
     setFetchError(null);
     try {
-      const res = await fetch('/api/products');
+      const res = await fetch('/api/products?limit=200');
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
       // Always use DB data — no static fallback
@@ -40,8 +40,9 @@ export const ProductProvider = ({ children }) => {
     fetchProducts();
   }, []);
 
+  // Returns the full product catalog for a given customer type,
+  // merging any locally-stored admin products (pre-DB-sync).
   const getProductsForType = (customerType = 'retail') => {
-    // Local admin-added products (from admin panel, before DB sync)
     let adminProducts = [];
     try {
       const saved = localStorage.getItem(ADMIN_PRODUCTS_KEY);
@@ -55,6 +56,29 @@ export const ProductProvider = ({ children }) => {
       return mergeCatalog(wholesaleCatalog, adminProducts);
     }
     return mergeCatalog(products, adminProducts);
+  };
+
+  // Derived helpers — all sourced from live DB data via getProductsForType
+  const getProductById = (id, customerType = 'retail') =>
+    getProductsForType(customerType).find(p => String(p.id) === String(id)) || null;
+
+  const getProductsByCategory = (categoryId, customerType = 'retail') =>
+    getProductsForType(customerType).filter(p => p.category === categoryId);
+
+  const getBestsellers = (customerType = 'retail') =>
+    getProductsForType(customerType).filter(p => p.isBestseller);
+
+  const getDeals = (customerType = 'retail') =>
+    getProductsForType(customerType).filter(p => p.discount >= 10);
+
+  const searchProducts = (query, customerType = 'retail') => {
+    const q = query.toLowerCase();
+    return getProductsForType(customerType).filter(p =>
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.brand || '').toLowerCase().includes(q) ||
+      (p.category || '').toLowerCase().includes(q) ||
+      (p.description || '').toLowerCase().includes(q)
+    );
   };
 
   const addProduct = async (productData) => {
@@ -82,7 +106,19 @@ export const ProductProvider = ({ children }) => {
   };
 
   return (
-    <ProductContext.Provider value={{ products, loading, fetchError, refreshProducts: fetchProducts, addProduct, getProductsForType }}>
+    <ProductContext.Provider value={{
+      products,
+      loading,
+      fetchError,
+      refreshProducts: fetchProducts,
+      addProduct,
+      getProductsForType,
+      getProductById,
+      getProductsByCategory,
+      getBestsellers,
+      getDeals,
+      searchProducts
+    }}>
       {children}
     </ProductContext.Provider>
   );

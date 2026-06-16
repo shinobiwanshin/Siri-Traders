@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
-import { getProductById, getProductsByCategory } from "../data/products";
+import { useProducts } from "../context/ProductContext";
 import { formatPrice } from "../utils/format";
 import { toWebpImage } from "../utils/images";
 import ProductCard from "../components/ProductCard";
@@ -26,6 +26,7 @@ const ProductDetail = () => {
   const { addToCart, removeFromCart, updateQuantity, getItemQuantity } =
     useCart();
   const { customerType } = useAuth();
+  const { getProductById, getProductsByCategory } = useProducts();
 
   const [product, setProduct] = useState(null);
   const [relatedProducts, setRelatedProducts] = useState([]);

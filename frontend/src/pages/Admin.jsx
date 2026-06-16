@@ -19,7 +19,8 @@ import {
   FiX
 } from 'react-icons/fi';
 import { getAccounts, useAuth } from '../context/AuthContext';
-import { getProducts as getAllProducts } from '../data/products';
+
+
 import { categories } from '../data/categories';
 import { formatPrice } from '../utils/format';
 import { toWebpImage } from '../utils/images';

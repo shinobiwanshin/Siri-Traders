@@ -1,30 +1,26 @@
 import { useSearchParams } from 'react-router-dom';
 import { FiPackage, FiShoppingBag } from 'react-icons/fi';
 import { categories } from '../data/categories';
-import { getProducts, getProductsByCategory } from '../data/products';
 import ProductCard from '../components/ProductCard';
 import CategoryCard from '../components/CategoryCard';
 import { useAuth } from '../context/AuthContext';
+import { useProducts } from '../context/ProductContext';
 import { toWebpImage } from '../utils/images';
 import './Categories.css';
 
 const Categories = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { customerType } = useAuth();
+  const { getProductsForType, getProductsByCategory, searchProducts } = useProducts();
   const activeCat = searchParams.get('cat') || '';
   const searchQuery = searchParams.get('search') || '';
   const isWholesale = customerType === 'wholesale';
 
   const filteredProducts = searchQuery
-    ? getProducts(customerType).filter(p =>
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.description.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+    ? searchProducts(searchQuery, customerType)
     : activeCat
     ? getProductsByCategory(activeCat, customerType)
-    : getProducts(customerType);
+    : getProductsForType(customerType);
 
   const activeCategory = categories.find(c => c.id === activeCat);
 

@@ -1,20 +1,21 @@
 import { Link } from 'react-router-dom';
 import { FiChevronRight, FiPackage, FiShoppingBag, FiStar } from 'react-icons/fi';
 import { categories } from '../data/categories';
-import { getProducts } from '../data/products';
 import ProductCard from '../components/ProductCard';
 import { useAuth } from '../context/AuthContext';
+import { useProducts } from '../context/ProductContext';
 import { toWebpImage } from '../utils/images';
 import { useSearchParams } from 'react-router-dom';
 import './Bestsellers.css';
 
 const Bestsellers = () => {
   const { customerType } = useAuth();
+  const { getProductsForType } = useProducts();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeCat = searchParams.get('cat') || '';
   const isWholesale = customerType === 'wholesale';
 
-  const allProducts = getProducts(customerType);
+  const allProducts = getProductsForType(customerType);
   const bestsellerProducts = allProducts.filter(p => p.isBestseller);
 
   // Priority order: pulses, rice, atta, oils, masala first, then everything else
