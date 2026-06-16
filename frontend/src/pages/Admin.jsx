@@ -290,6 +290,11 @@ const Admin = () => {
   const [wholesaleProducts, setWholesaleProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
 
+  // ── DB-backed orders state ──
+  const [liveOrders, setLiveOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [orderStatusUpdating, setOrderStatusUpdating] = useState(null); // orderId being updated
+
   // Helper: fetch all products from DB and split by category/type
   const loadDbProducts = useCallback(async () => {
     setProductsLoading(true);
@@ -320,6 +325,46 @@ const Admin = () => {
       return {};
     }
   }, [getToken]);
+
+  // Helper: fetch all orders from admin endpoint
+  const loadAdminOrders = useCallback(async () => {
+    setOrdersLoading(true);
+    try {
+      const headers = await authHeader();
+      const res = await fetch('/api/admin/orders', { headers });
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const data = await res.json();
+      setLiveOrders(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to load admin orders:', err);
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, [authHeader]);
+
+  useEffect(() => { loadAdminOrders(); }, [loadAdminOrders]);
+
+  // Update a single order's status via PATCH /api/admin/orders?id=<id>
+  const updateOrderStatus = async (orderId, newStatus) => {
+    setOrderStatusUpdating(orderId);
+    // Optimistic update
+    setLiveOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+    try {
+      const headers = { 'Content-Type': 'application/json', ...(await authHeader()) };
+      const res = await fetch(`/api/admin/orders?id=${orderId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (!res.ok) throw new Error(`PATCH failed: ${res.status}`);
+    } catch (err) {
+      console.error('updateOrderStatus error:', err);
+      // Revert on failure
+      await loadAdminOrders();
+    } finally {
+      setOrderStatusUpdating(null);
+    }
+  };
 
   const [offers, setOffers] = useState(() => readStorage(ADMIN_OFFERS_KEY, [
     { id: 'offer-1', title: 'Festive Grocery Sale', subtitle: 'Up to 25% off on essentials', badge: 'Live', price: 299, mrp: 399, group: 'festival', type: 'Festive offer', link: '/categories', active: true },
@@ -416,7 +461,7 @@ const Admin = () => {
     { label: 'Live offers', value: offers.filter(offer => offer.active).length, icon: FiGift },
     { label: 'Coupons', value: coupons.filter(coupon => coupon.active).length, icon: FiTag },
     { label: 'Customers', value: customers.length, icon: FiUsers },
-    { label: 'Orders', value: demoOrders.length, icon: FiTruck },
+    { label: 'Orders', value: liveOrders.length, icon: FiTruck },
   ];
 
   const exportItems = () => {
@@ -966,23 +1011,49 @@ const Admin = () => {
             <section className="admin-card admin-card--wide">
               <div className="admin-card__toolbar">
                 <h2>Customer orders</h2>
+                <button className="admin__ghost" onClick={loadAdminOrders} disabled={ordersLoading}>
+                  {ordersLoading ? 'Loading…' : 'Refresh'}
+                </button>
               </div>
-              <div className="admin-order-list">
-                {demoOrders.map(order => (
-                  <div key={order.id} className="admin-order-card">
-                    <FiTruck />
-                    <div>
-                      <strong>{order.customer}</strong>
-                      <span>{order.id}</span>
+              {ordersLoading ? (
+                <p className="admin-muted" style={{ padding: '24px 0' }}>Loading orders…</p>
+              ) : liveOrders.length === 0 ? (
+                <p className="admin-muted" style={{ padding: '24px 0' }}>No orders yet. Orders placed by customers will appear here.</p>
+              ) : (
+                <div className="admin-order-list">
+                  {liveOrders.map(order => (
+                    <div key={order.id} className="admin-order-card">
+                      <FiTruck />
+                      <div>
+                        <strong>Order #{order.id}</strong>
+                        <span>{new Date(order.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                      </div>
+                      <div><strong>Customer ID</strong><span style={{ fontSize: 11, wordBreak: 'break-all' }}>{order.userId}</span></div>
+                      <div><strong>Items</strong><span>{(order.items || []).map(item => `${item.name} ×${item.quantity}`).join(', ') || '—'}</span></div>
+                      <div><strong>Total</strong><span>{formatPrice(order.total)}</span></div>
+                      <div><strong>Payment</strong><span>{order.paymentMethod || '—'}</span></div>
+                      <div>
+                        <strong>Status</strong>
+                        <select
+                          value={order.status}
+                          onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+                          disabled={orderStatusUpdating === order.id}
+                          className={`admin-status-select admin-status-select--${(order.status || '').toLowerCase().replace(/\s+/g, '-')}`}
+                        >
+                          <option>Pending</option>
+                          <option>Preparing</option>
+                          <option>In Transit</option>
+                          <option>Delivered</option>
+                          <option>Paid</option>
+                        </select>
+                      </div>
+                      {order.deliveryAddress && (
+                        <div><strong>Address</strong><span>{order.deliveryAddress}</span></div>
+                      )}
                     </div>
-                    <div><strong>Item</strong><span>{order.item}</span></div>
-                    <div><strong>Quantity</strong><span>{order.quantity}</span></div>
-                    <div><strong>Cost</strong><span>{formatPrice(order.cost)}</span></div>
-                    <div><strong>Status</strong><span className={`admin-status-pill ${order.status === 'Yet to be delivered' ? 'admin-status-pill--pending' : ''}`}>{order.status}</span></div>
-                    <div><strong>{order.timelineLabel}</strong><span>{order.timeline}</span></div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </section>
           )}
 
@@ -991,31 +1062,40 @@ const Admin = () => {
               <div className="admin-card__toolbar">
                 <h2>Transaction bills & payment details</h2>
               </div>
-              <div className="admin-payment-list">
-                {demoPayments.map(payment => (
-                  <div key={payment.billNo} className="admin-payment-card">
-                    <FiCreditCard />
-                    <div>
-                      <strong>{payment.billNo}</strong>
-                      <span>{payment.customer} / {payment.orderId}</span>
+              {ordersLoading ? (
+                <p className="admin-muted" style={{ padding: '24px 0' }}>Loading payments…</p>
+              ) : liveOrders.length === 0 ? (
+                <p className="admin-muted" style={{ padding: '24px 0' }}>No transactions yet.</p>
+              ) : (
+                <div className="admin-payment-list">
+                  {liveOrders.map(order => (
+                    <div key={order.id} className="admin-payment-card">
+                      <FiCreditCard />
+                      <div>
+                        <strong>Order #{order.id}</strong>
+                        <span>{new Date(order.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                      </div>
+                      <div><strong>Customer ID</strong><span style={{ fontSize: 11, wordBreak: 'break-all' }}>{order.userId}</span></div>
+                      <div><strong>Payment</strong><span>{order.paymentMethod || '—'}</span></div>
+                      <div><strong>Items</strong><span>{(order.items || []).map(item => `${item.name} ×${item.quantity} @ ${formatPrice(item.price)}`).join(' | ') || '—'}</span></div>
+                      <div><strong>Total paid</strong><span>{formatPrice(order.total)}</span></div>
+                      <div><strong>Status</strong><span className={`admin-status-pill ${
+                        order.status === 'Pending' || order.status === 'Preparing' ? 'admin-status-pill--pending' : ''
+                      }`}>{order.status}</span></div>
                     </div>
-                    <div><strong>Payment</strong><span>{payment.method}</span></div>
-                    <div><strong>Transaction</strong><span>{payment.transactionId}</span></div>
-                    <div><strong>Bill</strong><span>Subtotal {formatPrice(payment.subtotal)} + Delivery {formatPrice(payment.deliveryFee)}</span></div>
-                    <div><strong>Paid</strong><span>{formatPrice(payment.paid)} / {payment.status}</span></div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </section>
           )}
 
-          {activeTab === 'content' && (
+          {(activeTab === 'retail-content' || activeTab === 'wholesale-content') && (
             <section className="admin-card admin-card--wide">
               <div className="admin-card__toolbar">
                 <h2>
-                  {adminMode === 'retail' ? 'Retail' : 'Wholesale'} Product Content Editor
+                  {activeTab === 'retail-content' ? 'Retail' : 'Wholesale'} Product Content Editor
                   <small style={{fontSize:11,fontWeight:600,color:'#687466',marginLeft:10}}>
-                    {adminMode === 'retail'
+                    {activeTab === 'retail-content'
                       ? '→ Visible at Retail Store'
                       : '→ Visible at Wholesale Store'}
                   </small>
@@ -1023,44 +1103,45 @@ const Admin = () => {
                 <label><FiSearch /><input value={contentSearch} onChange={(e) => setContentSearch(e.target.value)} placeholder="Search content" /></label>
               </div>
               <div className="admin-content-list">
-                <div className={`admin-content-header ${adminMode === 'wholesale' ? 'admin-content-header--ws' : ''}`}>
+                <div className={`admin-content-header ${activeTab === 'wholesale-content' ? 'admin-content-header--ws' : ''}`}>
                   <span>Image</span>
                   <span>Item</span>
                   <span>Price</span>
                   <span>% Off</span>
                   <span>Availability</span>
-                  {adminMode === 'wholesale' && <span>WS Price</span>}
-                  {adminMode === 'wholesale' && <span>Bulk Pack</span>}
-                  {adminMode === 'wholesale' && <span>WS Case</span>}
+                  {activeTab === 'wholesale-content' && <span>WS Price</span>}
+                  {activeTab === 'wholesale-content' && <span>Bulk Pack</span>}
+                  {activeTab === 'wholesale-content' && <span>WS Case</span>}
                   <span>Description</span>
                 </div>
                 {filteredContentProducts.map(product => (
-                  <div key={product.id} className={`admin-content-editor ${adminMode === 'wholesale' ? 'admin-content-editor--ws' : ''}`}>
+                  <div key={product.id} className={`admin-content-editor ${activeTab === 'wholesale-content' ? 'admin-content-editor--ws' : ''}`}>
                     <img src={toWebpImage(product.image)} alt={product.name} />
-                    <input value={product.name} onChange={(e) => updateProductField(product.id, 'name', e.target.value, adminMode === 'wholesale')} />
-                    <input value={product.price} onChange={(e) => updateProductField(product.id, 'price', e.target.value, adminMode === 'wholesale')} type="number" />
-                    <input value={product.discount} onChange={(e) => updateProductField(product.id, 'discount', e.target.value, adminMode === 'wholesale')} type="number" />
-                    <select value={product.stockNote} onChange={(e) => updateProductField(product.id, 'stockNote', e.target.value, adminMode === 'wholesale')}>
+                    <input value={product.name} onChange={(e) => updateProductField(product.id, 'name', e.target.value)} />
+                    <input value={product.price} onChange={(e) => updateProductField(product.id, 'price', e.target.value)} type="number" />
+                    <input value={product.discount} onChange={(e) => updateProductField(product.id, 'discount', e.target.value)} type="number" />
+                    <select value={product.stockNote} onChange={(e) => updateProductField(product.id, 'stockNote', e.target.value)}>
                       <option>In stock</option>
                       <option>Only few left</option>
                       <option>Only 10 left</option>
                       <option>Out of stock</option>
                     </select>
-                    {adminMode === 'wholesale' && (
-                      <input value={product.wholesalePrice || ''} onChange={(e) => updateProductField(product.id, 'wholesalePrice', e.target.value, true)} type="number" placeholder="WS price" />
+                    {activeTab === 'wholesale-content' && (
+                      <input value={product.wholesalePrice || ''} onChange={(e) => updateProductField(product.id, 'wholesalePrice', e.target.value)} type="number" placeholder="WS price" />
                     )}
-                    {adminMode === 'wholesale' && (
-                      <input value={product.bulkPackLabel || ''} onChange={(e) => updateProductField(product.id, 'bulkPackLabel', e.target.value, true)} placeholder="e.g. 10 kg bulk" />
+                    {activeTab === 'wholesale-content' && (
+                      <input value={product.bulkPackLabel || ''} onChange={(e) => updateProductField(product.id, 'bulkPackLabel', e.target.value)} placeholder="e.g. 10 kg bulk" />
                     )}
-                    {adminMode === 'wholesale' && (
-                      <input value={product.wholesaleCaseLabel || ''} onChange={(e) => updateProductField(product.id, 'wholesaleCaseLabel', e.target.value, true)} placeholder="e.g. 25 kg case" />
+                    {activeTab === 'wholesale-content' && (
+                      <input value={product.wholesaleCaseLabel || ''} onChange={(e) => updateProductField(product.id, 'wholesaleCaseLabel', e.target.value)} placeholder="e.g. 25 kg case" />
                     )}
-                    <input value={product.description} onChange={(e) => updateProductField(product.id, 'description', e.target.value, adminMode === 'wholesale')} />
+                    <input value={product.description || ''} onChange={(e) => updateProductField(product.id, 'description', e.target.value)} />
                   </div>
                 ))}
                 {filteredContentProducts.length === 0 && (
                   <p className="admin-muted" style={{padding:'24px 0'}}>
-                    No {adminMode} products yet. Add them in the {adminMode === 'retail' ? 'Retail Items' : 'Wholesale Items'} tab.
+                    No {activeTab === 'retail-content' ? 'retail' : 'wholesale'} products yet.
+                    Add them in the {activeTab === 'retail-content' ? 'Retail Items' : 'Wholesale Items'} tab.
                   </p>
                 )}
               </div>
