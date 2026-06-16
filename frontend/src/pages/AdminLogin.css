@@ -138,3 +138,42 @@
   font-weight: 900;
   box-shadow: 0 10px 24px rgba(255, 193, 7, 0.28);
 }
+
+/* Clerk admin status hint banners */
+.admin-login__clerk-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #FFF7E6;
+  border: 1px solid rgba(176, 141, 87, 0.3);
+  color: #8A6A3E;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.admin-login__clerk-hint svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.admin-login__clerk-hint a {
+  color: #1E3A5F;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.admin-login__clerk-hint--warn {
+  background: #FFF0EA;
+  border-color: rgba(255, 107, 53, 0.3);
+  color: #c2410c;
+}
+
+.admin-login__clerk-hint--ok {
+  background: #F0FDF4;
+  border-color: rgba(34, 197, 94, 0.3);
+  color: #166534;
+  font-weight: 700;
+}

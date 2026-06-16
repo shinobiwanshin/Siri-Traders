@@ -198,12 +198,19 @@ const Navbar = () => {
             />
           </form>
 
-          {/* Right actions — cart + hamburger only */}
+          {/* Right actions — cart + admin + sign in + hamburger */}
           <div className="navbar__actions">
             <Link to="/cart" className="navbar__cart" aria-label={`Cart with ${cartCount} items`}>
               <ShoppingCartIcon className="navbar__action-icon" />
               {cartCount > 0 && <span className="navbar__cart-badge">{cartCount}</span>}
             </Link>
+
+            {user?.isAdmin && (
+              <Link to="/admin" className="navbar__admin-btn" aria-label="Admin panel">
+                <ShieldIcon className="navbar__action-icon" />
+                <span>Admin</span>
+              </Link>
+            )}
 
             {!user && (
               <Link to="/login" className="navbar__signin">

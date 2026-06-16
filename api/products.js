@@ -1,9 +1,8 @@
 import { db, products } from '../db/index.js';
 import { eq } from 'drizzle-orm';
-import { createClerkClient } from '@clerk/backend';
+import { setCorsHeaders } from './_cors.js';
+import { requireAdmin } from './_adminAuth.js';
 import { z } from 'zod';
-
-const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
 
 const productSchema = z.object({
   name: z.string().min(1),
@@ -23,8 +22,7 @@ const productSchema = z.object({
 });
 
 export default async function handler(req, res) {
-  // CORS setup
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  setCorsHeaders(req, res);
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
 
@@ -57,25 +55,9 @@ export default async function handler(req, res) {
     }
     
     if (req.method === 'POST') {
-      // 1. Auth check
-      let authRequest;
-      try {
-        authRequest = await clerk.authenticateRequest(req);
-      } catch (err) {
-        console.error("Clerk auth connection error:", err);
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
-      const { userId } = authRequest;
-      if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
-      // 2. Admin verification
-      const user = await clerk.users.getUser(userId);
-      const isAdmin = user.publicMetadata?.role === 'admin';
-      if (!isAdmin) {
-        return res.status(403).json({ error: 'Forbidden' });
+      const auth = await requireAdmin(req);
+      if (!auth.ok) {
+        return res.status(auth.status).json({ error: auth.error });
       }
 
       // 3. Request body validation using Zod

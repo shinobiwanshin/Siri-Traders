@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FiBarChart2,
@@ -18,8 +18,8 @@ import {
   FiUsers,
   FiX
 } from 'react-icons/fi';
-import { getAccounts } from '../context/AuthContext';
-import { products as baseProducts, getProducts as getAllProducts } from '../data/products';
+import { getAccounts, useAuth } from '../context/AuthContext';
+import { getProducts as getAllProducts } from '../data/products';
 import { categories } from '../data/categories';
 import { formatPrice } from '../utils/format';
 import { toWebpImage } from '../utils/images';
@@ -277,24 +277,49 @@ const getStoredList = (key) => {
 
 const Admin = () => {
   const navigate = useNavigate();
+  const { user, isLoaded, getToken } = useAuth();
   const [adminSession, setAdminSession] = useState(() => getAdminSession());
   const [activeTab, setActiveTab] = useState('dashboard');
   const [adminMode, setAdminMode] = useState('retail'); // 'retail' | 'wholesale'
   const [searchQuery, setSearchQuery] = useState('');
+  const [productSaving, setProductSaving] = useState(false);
+  const [productError, setProductError] = useState(null);
 
-  // ── Separate state for retail vs wholesale products ──
-  const [retailProducts, setRetailProducts] = useState(() =>
-    readStorage(ADMIN_PRODUCTS_RETAIL_KEY, baseProducts.map(product => ({
-      ...product,
-      stockNote: product.inStock ? 'In stock' : 'Out of stock'
-    })))
-  );
-  const [wholesaleProducts, setWholesaleProducts] = useState(() =>
-    readStorage(ADMIN_PRODUCTS_WHOLESALE_KEY, getAllProducts('wholesale').map(product => ({
-      ...product,
-      stockNote: product.inStock ? 'In stock' : 'Out of stock'
-    })))
-  );
+  // ── DB-backed product state ──
+  const [retailProducts, setRetailProducts] = useState([]);
+  const [wholesaleProducts, setWholesaleProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+
+  // Helper: fetch all products from DB and split by category/type
+  const loadDbProducts = useCallback(async () => {
+    setProductsLoading(true);
+    try {
+      const res = await fetch('/api/products?limit=100');
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const data = await res.json();
+      const withNote = (p) => ({ ...p, stockNote: p.inStock ? 'In stock' : 'Out of stock' });
+      // Wholesale products have a wholesalePrice field; everything else is retail
+      setRetailProducts(data.filter(p => !p.wholesalePrice).map(withNote));
+      setWholesaleProducts(data.filter(p => p.wholesalePrice).map(withNote));
+    } catch (err) {
+      console.error('Failed to load products from DB:', err);
+    } finally {
+      setProductsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadDbProducts(); }, [loadDbProducts]);
+
+  // Helper: returns Authorization header with current Clerk JWT
+  const authHeader = useCallback(async () => {
+    if (!getToken) return {};
+    try {
+      const token = await getToken();
+      return token ? { 'Authorization': `Bearer ${token}` } : {};
+    } catch {
+      return {};
+    }
+  }, [getToken]);
 
   const [offers, setOffers] = useState(() => readStorage(ADMIN_OFFERS_KEY, [
     { id: 'offer-1', title: 'Festive Grocery Sale', subtitle: 'Up to 25% off on essentials', badge: 'Live', price: 299, mrp: 399, group: 'festival', type: 'Festive offer', link: '/categories', active: true },
@@ -311,17 +336,7 @@ const Admin = () => {
   const [adminDraft, setAdminDraft] = useState(blankAdmin);
   const [contentSearch, setContentSearch] = useState('');
 
-  // ── Separate persist functions ──
-  const persistRetailProducts = (next) => {
-    setRetailProducts(next);
-    writeStorage(ADMIN_PRODUCTS_RETAIL_KEY, next);
-  };
-
-  const persistWholesaleProducts = (next) => {
-    setWholesaleProducts(next);
-    writeStorage(ADMIN_PRODUCTS_WHOLESALE_KEY, next);
-  };
-
+  // ── Offers/coupons persist functions (still localStorage) ──
   const persistOffers = (nextOffers) => {
     setOffers(nextOffers);
     writeStorage(ADMIN_OFFERS_KEY, nextOffers);
@@ -447,23 +462,29 @@ const Admin = () => {
     event.target.value = '';
   };
 
-  const saveProduct = (event) => {
+  const saveProduct = async (event) => {
     event.preventDefault();
+    setProductSaving(true);
+    setProductError(null);
     const isWholesale = activeTab === 'wholesale-products';
 
     const baseNext = {
-      ...productDraft,
-      id: productDraft.id || Date.now(),
+      name: productDraft.name,
+      category: productDraft.category,
+      brand: productDraft.brand || null,
+      weight: productDraft.weight || null,
+      unit: productDraft.unit || 'g',
       price: Number(productDraft.price) || 0,
       mrp: Number(productDraft.mrp) || Number(productDraft.price) || 0,
       discount: Number(productDraft.discount) || 0,
       image: productDraft.image || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80',
+      description: productDraft.description || null,
       inStock: productDraft.stockNote !== 'Out of stock',
-      isBestseller: Boolean(productDraft.isBestseller)
+      isBestseller: Boolean(productDraft.isBestseller),
+      deliveryTime: productDraft.deliveryTime || '15 mins'
     };
 
     if (isWholesale) {
-      // Build variants from base + bulkPack + wholesaleCase entries
       const variants = [];
       if (baseNext.weight && baseNext.price) {
         variants.push({ label: `${baseNext.weight} ${baseNext.unit}`, price: baseNext.price });
@@ -474,29 +495,31 @@ const Admin = () => {
       if (productDraft.wholesaleCaseLabel && productDraft.wholesaleCasePrice) {
         variants.push({ label: productDraft.wholesaleCaseLabel, price: Number(productDraft.wholesaleCasePrice) || 0 });
       }
-      const nextProduct = {
-        ...baseNext,
+      Object.assign(baseNext, {
         wholesalePrice: Number(productDraft.wholesalePrice) || baseNext.price,
-        bulkPackLabel: productDraft.bulkPackLabel || '',
-        bulkPackPrice: Number(productDraft.bulkPackPrice) || 0,
-        wholesaleCaseLabel: productDraft.wholesaleCaseLabel || '',
-        wholesaleCasePrice: Number(productDraft.wholesaleCasePrice) || 0,
-        variants: variants.length > 0 ? variants : undefined
-      };
-      const exists = wholesaleProducts.some(p => String(p.id) === String(nextProduct.id));
-      const next = exists
-        ? wholesaleProducts.map(p => String(p.id) === String(nextProduct.id) ? nextProduct : p)
-        : [nextProduct, ...wholesaleProducts];
-      persistWholesaleProducts(next);
-      setProductDraft(blankWholesaleProduct);
-    } else {
-      const nextProduct = { ...baseNext };
-      const exists = retailProducts.some(p => String(p.id) === String(nextProduct.id));
-      const next = exists
-        ? retailProducts.map(p => String(p.id) === String(nextProduct.id) ? nextProduct : p)
-        : [nextProduct, ...retailProducts];
-      persistRetailProducts(next);
-      setProductDraft(blankProduct);
+        variants: variants.length > 0 ? variants : null
+      });
+    }
+
+    try {
+      const headers = { 'Content-Type': 'application/json', ...(await authHeader()) };
+      const isEdit = Boolean(productDraft.id);
+      const url = isEdit ? `/api/products/${productDraft.id}` : '/api/products';
+      const method = isEdit ? 'PATCH' : 'POST';
+
+      const res = await fetch(url, { method, headers, body: JSON.stringify(baseNext) });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Server error ${res.status}`);
+      }
+      // Refresh product list from DB
+      await loadDbProducts();
+      setProductDraft(isWholesale ? blankWholesaleProduct : blankProduct);
+    } catch (err) {
+      console.error('saveProduct error:', err);
+      setProductError(err.message);
+    } finally {
+      setProductSaving(false);
     }
   };
 
@@ -518,25 +541,40 @@ const Admin = () => {
     setActiveTab('products');
   };
 
-  // updateProductStock: applies to the correct array based on whether product has wholesalePrice
-  const updateProductStock = (productId, stockNote, isWholesale) => {
-    if (isWholesale) {
-      persistWholesaleProducts(wholesaleProducts.map(p =>
-        p.id === productId ? { ...p, stockNote, inStock: stockNote !== 'Out of stock' } : p
-      ));
-    } else {
-      persistRetailProducts(retailProducts.map(p =>
-        p.id === productId ? { ...p, stockNote, inStock: stockNote !== 'Out of stock' } : p
-      ));
+  // updateProductStock: PATCHes inStock in DB then refreshes
+  const updateProductStock = async (productId, stockNote) => {
+    const inStock = stockNote !== 'Out of stock';
+    // Optimistic UI update
+    const updater = (p) => p.id === productId ? { ...p, stockNote, inStock } : p;
+    setRetailProducts(prev => prev.map(updater));
+    setWholesaleProducts(prev => prev.map(updater));
+    try {
+      const headers = { 'Content-Type': 'application/json', ...(await authHeader()) };
+      await fetch(`/api/products/${productId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ inStock })
+      });
+    } catch (err) {
+      console.error('updateProductStock error:', err);
+      // Revert on failure
+      await loadDbProducts();
     }
   };
 
-  // removeProduct: removes from the correct mode's array
-  const removeProduct = (productId) => {
-    if (activeTab === 'wholesale-products') {
-      persistWholesaleProducts(wholesaleProducts.filter(p => p.id !== productId));
-    } else {
-      persistRetailProducts(retailProducts.filter(p => p.id !== productId));
+  // removeProduct: DELETEs from DB
+  const removeProduct = async (productId) => {
+    if (!window.confirm('Delete this product from the database?')) return;
+    // Optimistic UI
+    setRetailProducts(prev => prev.filter(p => p.id !== productId));
+    setWholesaleProducts(prev => prev.filter(p => p.id !== productId));
+    try {
+      const headers = { ...(await authHeader()) };
+      const res = await fetch(`/api/products/${productId}`, { method: 'DELETE', headers });
+      if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+    } catch (err) {
+      console.error('removeProduct error:', err);
+      await loadDbProducts();
     }
   };
 
@@ -579,19 +617,31 @@ const Admin = () => {
     setAdminDraft(blankAdmin);
   };
 
-  const updateProductField = (productId, field, value, isWholesale) => {
-    const updater = (p) =>
-      p.id === productId
-        ? {
-            ...p,
-            [field]: ['price', 'mrp', 'discount'].includes(field) ? Number(value) || 0 : value,
-            inStock: field === 'stockNote' ? value !== 'Out of stock' : p.inStock
-          }
-        : p;
-    if (isWholesale) {
-      persistWholesaleProducts(wholesaleProducts.map(updater));
-    } else {
-      persistRetailProducts(retailProducts.map(updater));
+  const updateProductField = async (productId, field, value) => {
+    const coerced = ['price', 'mrp', 'discount'].includes(field) ? Number(value) || 0 : value;
+    const inStock = field === 'stockNote' ? value !== 'Out of stock' : undefined;
+    // Optimistic UI
+    const updater = (p) => {
+      if (p.id !== productId) return p;
+      const next = { ...p, [field]: coerced };
+      if (inStock !== undefined) next.inStock = inStock;
+      return next;
+    };
+    setRetailProducts(prev => prev.map(updater));
+    setWholesaleProducts(prev => prev.map(updater));
+    // Persist to DB
+    try {
+      const payload = { [field]: coerced };
+      if (inStock !== undefined) payload.inStock = inStock;
+      const headers = { 'Content-Type': 'application/json', ...(await authHeader()) };
+      await fetch(`/api/products/${productId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify(payload)
+      });
+    } catch (err) {
+      console.error('updateProductField error:', err);
+      await loadDbProducts();
     }
   };
 
@@ -607,13 +657,22 @@ const Admin = () => {
     navigate('/admin-login');
   };
 
-  if (!adminSession) {
+  // Access guard: require both local admin session AND Clerk admin role
+  if (!isLoaded) {
+    return <div className="admin-auth-required"><div className="admin-denied"><p>Loading…</p></div></div>;
+  }
+
+  if (!adminSession || !user?.isAdmin) {
     return (
       <div className="admin-auth-required">
         <div className="admin-denied">
           <FiLock className="admin-denied__icon" />
-          <h2>Admin login required</h2>
-          <p>This admin page is separate from customer login.</p>
+          <h2>Admin access required</h2>
+          <p>
+            {!adminSession
+              ? 'You must log in via the admin login page.'
+              : 'Your Clerk account does not have admin privileges. Set publicMetadata.role = "admin" in the Clerk dashboard.'}
+          </p>
           <button className="admin-denied__btn" onClick={() => navigate('/admin-login')}>Go to Admin Login</button>
         </div>
       </div>

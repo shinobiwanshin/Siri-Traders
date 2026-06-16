@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { baseProducts, toWholesaleProduct, mergeCatalog, ADMIN_PRODUCTS_KEY } from '../data/products';
+import { toWholesaleProduct, mergeCatalog, ADMIN_PRODUCTS_KEY } from '../data/products';
 import { useAuth } from './AuthContext';
 
 const ProductContext = createContext();
@@ -15,22 +15,22 @@ export const useProducts = () => {
 export const ProductProvider = ({ children }) => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
   const { getToken } = useAuth();
 
   const fetchProducts = async () => {
     setLoading(true);
+    setFetchError(null);
     try {
       const res = await fetch('/api/products');
-      if (!res.ok) throw new Error('Failed to fetch');
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
-      if (data && data.length > 0) {
-        setProducts(data);
-      } else {
-        setProducts(baseProducts);
-      }
+      // Always use DB data — no static fallback
+      setProducts(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.warn("Could not fetch products from database. Falling back to local static catalog.", err);
-      setProducts(baseProducts);
+      console.error("Could not fetch products from database:", err);
+      setFetchError(err.message);
+      setProducts([]); // Empty — do NOT fall back to static data
     } finally {
       setLoading(false);
     }
@@ -41,10 +41,15 @@ export const ProductProvider = ({ children }) => {
   }, []);
 
   const getProductsForType = (customerType = 'retail') => {
-    // Read local admin products (if any exist in local storage)
-    const saved = localStorage.getItem(ADMIN_PRODUCTS_KEY);
-    const adminProducts = saved ? JSON.parse(saved) : [];
-    
+    // Local admin-added products (from admin panel, before DB sync)
+    let adminProducts = [];
+    try {
+      const saved = localStorage.getItem(ADMIN_PRODUCTS_KEY);
+      adminProducts = saved ? JSON.parse(saved) : [];
+    } catch {
+      adminProducts = [];
+    }
+
     if (customerType === 'wholesale') {
       const wholesaleCatalog = products.map(toWholesaleProduct);
       return mergeCatalog(wholesaleCatalog, adminProducts);
@@ -77,7 +82,7 @@ export const ProductProvider = ({ children }) => {
   };
 
   return (
-    <ProductContext.Provider value={{ products, loading, refreshProducts: fetchProducts, addProduct, getProductsForType }}>
+    <ProductContext.Provider value={{ products, loading, fetchError, refreshProducts: fetchProducts, addProduct, getProductsForType }}>
       {children}
     </ProductContext.Provider>
   );

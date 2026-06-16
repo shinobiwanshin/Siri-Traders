@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useUser, useClerk, useAuth as useClerkAuth } from '@clerk/clerk-react';
 
 const AuthContext = createContext();
@@ -59,13 +59,45 @@ const ClerkAuthProvider = ({ children }) => {
     localStorage.setItem('siri-traders-customer-type', customerType);
   }, [customerType]);
 
+  // isAdmin: starts from publicMetadata for instant render,
+  // then upgrades to privateMetadata once /api/me resolves
+  const [isAdmin, setIsAdmin] = useState(
+    () => clerkUser?.publicMetadata?.isAdmin === true || clerkUser?.privateMetadata?.isAdmin === true || false
+  );
+
+  const resolveAdminStatus = useCallback(async () => {
+    if (!clerkUser) { setIsAdmin(false); return; }
+    try {
+      const token = await getToken();
+      console.debug('[auth] Clerk token obtained:', !!token);
+      if (!token) { setIsAdmin(false); return; }
+      const res = await fetch('/api/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      console.debug('[auth] /api/me status:', res.status);
+      if (res.ok) {
+        const data = await res.json();
+        console.debug('[auth] /api/me response:', data);
+        setIsAdmin(data.isAdmin === true);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        console.warn('[auth] /api/me error:', res.status, err);
+      }
+    } catch (err) {
+      console.warn('[auth] /api/me fetch failed:', err?.message);
+    }
+  }, [clerkUser, getToken]);
+
+
+  useEffect(() => { resolveAdminStatus(); }, [resolveAdminStatus]);
+
   const user = clerkUser ? {
     id: clerkUser.id,
     name: clerkUser.fullName || clerkUser.username || clerkUser.primaryEmailAddress?.emailAddress?.split('@')[0] || 'User',
     email: clerkUser.primaryEmailAddress?.emailAddress || '',
     phone: clerkUser.primaryPhoneNumber?.phoneNumber || '',
     avatar: clerkUser.imageUrl || null,
-    isAdmin: clerkUser.publicMetadata?.role === 'admin' || false
+    isAdmin  // reactive — updated when /api/me resolves
   } : null;
 
   const logout = () => signOut();
@@ -84,6 +116,7 @@ const ClerkAuthProvider = ({ children }) => {
     <AuthContext.Provider
       value={{
         user,
+        isAdmin,          // also exposed at top level for convenience
         isAuthenticated: !!clerkUser,
         isLoaded,
         login,
