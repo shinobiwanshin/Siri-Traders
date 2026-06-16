@@ -300,7 +300,7 @@ const Admin = () => {
   const loadDbProducts = useCallback(async () => {
     setProductsLoading(true);
     try {
-      const res = await fetch('/api/products?limit=100');
+      const res = await fetch('/api/products?limit=500', { cache: 'no-store' });
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const data = await res.json();
       const withNote = (p) => ({ ...p, stockNote: p.inStock ? 'In stock' : 'Out of stock' });
@@ -517,14 +517,14 @@ const Admin = () => {
     const baseNext = {
       name: productDraft.name,
       category: productDraft.category,
-      brand: productDraft.brand || null,
-      weight: productDraft.weight || null,
+      brand: productDraft.brand || undefined,
+      weight: productDraft.weight || undefined,
       unit: productDraft.unit || 'g',
       price: Number(productDraft.price) || 0,
       mrp: Number(productDraft.mrp) || Number(productDraft.price) || 0,
       discount: Number(productDraft.discount) || 0,
-      image: productDraft.image || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80',
-      description: productDraft.description || null,
+      image: productDraft.image || undefined,
+      description: productDraft.description || undefined,
       inStock: productDraft.stockNote !== 'Out of stock',
       isBestseller: Boolean(productDraft.isBestseller),
       deliveryTime: productDraft.deliveryTime || '15 mins'

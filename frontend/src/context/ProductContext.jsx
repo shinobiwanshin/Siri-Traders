@@ -22,7 +22,7 @@ export const ProductProvider = ({ children }) => {
     setLoading(true);
     setFetchError(null);
     try {
-      const res = await fetch('/api/products?limit=200');
+      const res = await fetch('/api/products?limit=500', { cache: 'no-store' });
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
       // Always use DB data — no static fallback

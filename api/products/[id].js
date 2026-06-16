@@ -28,7 +28,7 @@ export default async function handler(req, res) {
       if (!result.length) {
         return res.status(404).json({ error: 'Product not found' });
       }
-      res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=3600, stale-while-revalidate=600');
+      res.setHeader('Cache-Control', 'no-store');
       return res.status(200).json(result[0]);
     } catch (error) {
       console.error('DB error in GET /api/products/[id]:', error);

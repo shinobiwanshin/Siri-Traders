@@ -1,5 +1,5 @@
 import { db, products } from '../db/index.js';
-import { eq } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import { setCorsHeaders } from './_cors.js';
 import { requireAdmin } from './_adminAuth.js';
 import { z } from 'zod';
@@ -9,16 +9,16 @@ const productSchema = z.object({
   category: z.string().min(1),
   price: z.number().positive(),
   unit: z.string().min(1),
-  brand: z.string().optional(),
-  weight: z.string().optional(),
+  brand: z.string().nullish(),
+  weight: z.string().nullish(),
   mrp: z.number().positive().optional(),
   discount: z.number().nonnegative().optional(),
-  image: z.string().url().optional(),
-  description: z.string().optional(),
+  image: z.string().url().nullish(),
+  description: z.string().nullish(),
   inStock: z.boolean().optional(),
-  deliveryTime: z.string().optional(),
+  deliveryTime: z.string().nullish(),
   isBestseller: z.boolean().optional(),
-  variants: z.array(z.any()).optional()
+  variants: z.array(z.any()).nullish()
 });
 
 export default async function handler(req, res) {
@@ -36,21 +36,21 @@ export default async function handler(req, res) {
       let limitVal = parseInt(req.query.limit, 10);
       let offsetVal = parseInt(req.query.offset, 10);
 
-      if (Number.isNaN(limitVal)) limitVal = 20;
+      if (Number.isNaN(limitVal)) limitVal = 500;
       if (Number.isNaN(offsetVal)) offsetVal = 0;
 
-      const parsedLimit = Math.min(100, Math.max(1, limitVal));
+      const parsedLimit = Math.min(500, Math.max(1, limitVal));
       const parsedOffset = Math.max(0, offsetVal);
 
-      let query = db.select().from(products);
+      let query = db.select().from(products).orderBy(asc(products.id));
       if (category) {
-        query = query.where(eq(products.category, category));
+        query = query.where(eq(products.category, category)).orderBy(asc(products.id));
       }
       
       const allProducts = await query.limit(parsedLimit).offset(parsedOffset);
 
-      // Cache aggressively for 1 hour on Vercel CDN, revalidate clients in 60s
-      res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=3600, stale-while-revalidate=600');
+      // No browser cache (always fresh), CDN cache 10 min with 1 min stale-while-revalidate
+      res.setHeader('Cache-Control', 'no-store, s-maxage=600, stale-while-revalidate=60');
       return res.status(200).json(allProducts);
     }
     
