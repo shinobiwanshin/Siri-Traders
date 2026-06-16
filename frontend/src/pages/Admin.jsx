@@ -19,7 +19,7 @@ import {
   FiX
 } from 'react-icons/fi';
 import { getAccounts, useAuth } from '../context/AuthContext';
-
+import { useProducts } from '../context/ProductContext';
 
 import { categories } from '../data/categories';
 import { formatPrice } from '../utils/format';
@@ -279,6 +279,7 @@ const getStoredList = (key) => {
 const Admin = () => {
   const navigate = useNavigate();
   const { user, isLoaded, getToken } = useAuth();
+  const { refreshProducts } = useProducts();
   const [adminSession, setAdminSession] = useState(() => getAdminSession());
   const [activeTab, setActiveTab] = useState('dashboard');
   const [adminMode, setAdminMode] = useState('retail'); // 'retail' | 'wholesale'
@@ -294,7 +295,10 @@ const Admin = () => {
   // ── DB-backed orders state ──
   const [liveOrders, setLiveOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
-  const [orderStatusUpdating, setOrderStatusUpdating] = useState(null); // orderId being updated
+  const [orderStatusUpdating, setOrderStatusUpdating] = useState(null);
+
+  // ── DB-backed dashboard stats ──
+  const [dbStats, setDbStats] = useState({ retailProducts: null, orders: null, customers: null });
 
   // Helper: fetch all products from DB and split by category/type
   const loadDbProducts = useCallback(async () => {
@@ -344,6 +348,21 @@ const Admin = () => {
   }, [authHeader]);
 
   useEffect(() => { loadAdminOrders(); }, [loadAdminOrders]);
+
+  // Helper: fetch real stats (product count, order count, customer count) from DB
+  const loadAdminStats = useCallback(async () => {
+    try {
+      const headers = await authHeader();
+      const res = await fetch('/api/admin/stats', { headers, cache: 'no-store' });
+      if (!res.ok) return; // silently fail — stat cards will fall back to local counts
+      const data = await res.json();
+      setDbStats(data);
+    } catch (err) {
+      console.error('Failed to load admin stats:', err);
+    }
+  }, [authHeader]);
+
+  useEffect(() => { loadAdminStats(); }, [loadAdminStats]);
 
   // Update a single order's status via PATCH /api/admin/orders?id=<id>
   const updateOrderStatus = async (orderId, newStatus) => {
@@ -457,12 +476,28 @@ const Admin = () => {
   const allProducts = [...retailProducts, ...wholesaleProducts];
 
   const stats = [
-    { label: 'Retail products', value: retailProducts.length, icon: FiPackage },
-    { label: 'Wholesale products', value: wholesaleProducts.length, icon: FiPackage },
-    { label: 'Live offers', value: offers.filter(offer => offer.active).length, icon: FiGift },
-    { label: 'Coupons', value: coupons.filter(coupon => coupon.active).length, icon: FiTag },
-    { label: 'Customers', value: customers.length, icon: FiUsers },
-    { label: 'Orders', value: liveOrders.length, icon: FiTruck },
+    {
+      label: 'Retail products',
+      value: dbStats.retailProducts ?? retailProducts.length,
+      icon: FiPackage
+    },
+    {
+      label: 'Wholesale products',
+      value: wholesaleProducts.length,
+      icon: FiPackage
+    },
+    { label: 'Live offers', value: offers.filter(o => o.active).length, icon: FiGift },
+    { label: 'Coupons', value: coupons.filter(c => c.active).length, icon: FiTag },
+    {
+      label: 'Customers',
+      value: dbStats.customers ?? customers.length,
+      icon: FiUsers
+    },
+    {
+      label: 'Orders',
+      value: dbStats.orders ?? liveOrders.length,
+      icon: FiTruck
+    },
   ];
 
   const exportItems = () => {
@@ -560,6 +595,7 @@ const Admin = () => {
       }
       // Refresh product list from DB
       await loadDbProducts();
+      refreshProducts(); // keep store pages in sync
       setProductDraft(isWholesale ? blankWholesaleProduct : blankProduct);
     } catch (err) {
       console.error('saveProduct error:', err);
@@ -605,6 +641,7 @@ const Admin = () => {
       console.error('updateProductStock error:', err);
       // Revert on failure
       await loadDbProducts();
+      refreshProducts();
     }
   };
 
@@ -621,6 +658,7 @@ const Admin = () => {
     } catch (err) {
       console.error('removeProduct error:', err);
       await loadDbProducts();
+      refreshProducts();
     }
   };
 
@@ -688,6 +726,7 @@ const Admin = () => {
     } catch (err) {
       console.error('updateProductField error:', err);
       await loadDbProducts();
+      refreshProducts();
     }
   };
 
