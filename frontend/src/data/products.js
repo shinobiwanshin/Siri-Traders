@@ -2266,16 +2266,24 @@ export const baseProducts = [
   }
 ];
 
-const ADMIN_PRODUCTS_KEY = 'siri-admin-products';
+const ADMIN_PRODUCTS_RETAIL_KEY = 'siri-admin-products-retail';
+const ADMIN_PRODUCTS_WHOLESALE_KEY = 'siri-admin-products-wholesale';
+const ADMIN_CATEGORIES_KEY = 'siri-admin-categories';
 
-const readAdminProducts = () => {
-  if (typeof localStorage === 'undefined') return null;
+const readAdminRetailProducts = () => {
+  if (typeof localStorage === 'undefined') return [];
   try {
-    const saved = localStorage.getItem(ADMIN_PRODUCTS_KEY);
-    return saved ? JSON.parse(saved) : null;
-  } catch {
-    return null;
-  }
+    const saved = localStorage.getItem(ADMIN_PRODUCTS_RETAIL_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch { return []; }
+};
+
+const readAdminWholesaleProducts = () => {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const saved = localStorage.getItem(ADMIN_PRODUCTS_WHOLESALE_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch { return []; }
 };
 
 const mergeCatalog = (catalog, adminProducts = []) => {
@@ -2328,12 +2336,13 @@ const toWholesaleProduct = (product) => {
 };
 
 export const getProducts = (customerType = 'retail') => {
-  const adminProducts = readAdminProducts() || [];
   if (customerType === 'wholesale') {
+    const adminWholesale = readAdminWholesaleProducts();
     const wholesaleCatalog = baseProducts.map(toWholesaleProduct);
-    return mergeCatalog(wholesaleCatalog, adminProducts);
+    return mergeCatalog(wholesaleCatalog, adminWholesale);
   }
-  return mergeCatalog(baseProducts, adminProducts);
+  const adminRetail = readAdminRetailProducts();
+  return mergeCatalog(baseProducts, adminRetail);
 };
 
 export const products = getProducts();
