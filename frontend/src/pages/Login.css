@@ -289,7 +289,7 @@
 }
 
 .login-card__send-otp:hover:not(:disabled) {
-  background: #1E3A5F;
+  background: #2D5016;
   box-shadow: 0 6px 18px rgba(85, 117, 46, 0.24);
   transform: translateY(-1px);
 }
@@ -589,7 +589,7 @@
 
 .login-card__send-otp,
 .login-card__submit {
-  background: #1E3A5F;
+  background: #2D5016;
   color: #FFFFFF;
 }
 
@@ -610,7 +610,7 @@
 }
 
 .login-toast {
-  background: #1E3A5F;
+  background: #2D5016;
 }
 
 /* ── Clerk verify step ── */
