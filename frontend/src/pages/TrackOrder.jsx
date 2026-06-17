@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiCheckCircle, FiClock, FiPackage, FiTruck, FiHome } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
@@ -6,8 +6,25 @@ import { getUserStorageKey } from '../utils/userStorage';
 import { formatPrice } from '../utils/format';
 import './TrackOrder.css';
 
-// Tracking steps — backend will push real-time status updates here later
-// TODO (backend): replace interval simulation with WebSocket / SSE from server
+/*
+ * Tracking Steps
+ * The UI renders a stepper based on the order's `status` field.
+ * The status value must be one of the keys in STATUS_TO_STEP.
+ *
+ * ── Backend Integration (future) ──
+ * When the backend is ready, it should update the order's `status` field
+ * via one of these approaches:
+ *   1. REST API polling  – periodically GET /api/orders/:id → update state
+ *   2. WebSocket / SSE   – listen for `order.status.updated` events → update state
+ *
+ * The `refreshOrder()` function below reads the latest order data and
+ * updates the UI. Call it after any status change from the backend.
+ *
+ * Expected order shape from backend:
+ *   { id, status, items, total, address, deliveryTime, createdAt, ... }
+ *   status: 'placed' | 'confirmed' | 'packed' | 'transit' | 'delivered'
+ */
+
 const STEPS = [
   { id: 'placed',    icon: FiCheckCircle, label: 'Order Placed',         sub: 'We received your order' },
   { id: 'confirmed', icon: FiPackage,     label: 'Order Confirmed',      sub: 'Store is preparing your items' },
@@ -34,8 +51,16 @@ const TrackOrder = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [eta, setEta] = useState(null);
 
-  useEffect(() => {
-    // Load order from localStorage
+  /**
+   * refreshOrder – reads the latest order data and updates UI state.
+   *
+   * Currently reads from localStorage.
+   * ── Backend Integration (future) ──
+   * Replace the localStorage read with an API call:
+   *   const res = await fetch(`/api/orders/${orderId}`);
+   *   const found = await res.json();
+   */
+  const refreshOrder = useCallback(() => {
     try {
       const key = getUserStorageKey(user, 'orders');
       const saved = key ? localStorage.getItem(key) : null;
@@ -56,36 +81,40 @@ const TrackOrder = () => {
     } catch { /* ignore */ }
   }, [orderId, user]);
 
+  // Load order on mount
   useEffect(() => {
-    if (!order) return;
-    if (currentStep >= STEPS.length - 1) return;
+    refreshOrder();
+  }, [refreshOrder]);
 
-    // Simulate progression — backend will replace this with real status updates
-    // TODO (backend): listen to WebSocket event `order.status.updated` instead
-    const timings = [8000, 15000, 25000, 40000]; // ms between steps
-    const delay = timings[currentStep] || 15000;
-
-    const timer = setTimeout(() => {
-      setCurrentStep(prev => {
-        const next = Math.min(prev + 1, STEPS.length - 1);
-        // Persist updated status
-        try {
-          const key = getUserStorageKey(user, 'orders');
-          const saved = key ? localStorage.getItem(key) : null;
-          if (saved) {
-            const orders = JSON.parse(saved);
-            const updated = orders.map(o =>
-              o.id === orderId ? { ...o, status: STEPS[next].id } : o
-            );
-            if (key) localStorage.setItem(key, JSON.stringify(updated));
-          }
-        } catch { /* ignore */ }
-        return next;
-      });
-    }, delay);
-
-    return () => clearTimeout(timer);
-  }, [currentStep, order, orderId, user]);
+  /*
+   * ── Backend Integration (future) ──
+   * Uncomment ONE of the blocks below to enable real-time status updates:
+   *
+   * Option A: Polling (simple)
+   * useEffect(() => {
+   *   const interval = setInterval(refreshOrder, 10000); // poll every 10s
+   *   return () => clearInterval(interval);
+   * }, [refreshOrder]);
+   *
+   * Option B: WebSocket (recommended)
+   * useEffect(() => {
+   *   const ws = new WebSocket(`wss://your-api.com/ws/orders/${orderId}`);
+   *   ws.onmessage = (event) => {
+   *     const data = JSON.parse(event.data);
+   *     if (data.type === 'order.status.updated') {
+   *       refreshOrder(); // or directly setOrder(data.order)
+   *     }
+   *   };
+   *   return () => ws.close();
+   * }, [orderId, refreshOrder]);
+   *
+   * Option C: Server-Sent Events
+   * useEffect(() => {
+   *   const es = new EventSource(`/api/orders/${orderId}/stream`);
+   *   es.addEventListener('status', () => refreshOrder());
+   *   return () => es.close();
+   * }, [orderId, refreshOrder]);
+   */
 
   if (!order) {
     return (
