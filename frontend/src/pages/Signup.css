@@ -357,3 +357,11 @@
 .signup-card__submit:hover {
   box-shadow: 0 4px 16px rgba(30, 58, 95, 0.24);
 }
+
+/* Clerk-styled card */
+.signup-card--clerk {
+  max-width: 460px;
+}
+
+.signup-card--clerk .cl-card { box-shadow: none !important; padding: 0 !important; }
+.signup-card--clerk .cl-header { display: none !important; }

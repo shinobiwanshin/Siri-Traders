@@ -645,3 +645,11 @@
   color: #2D5016;
   word-break: break-all;
 }
+
+/* Clerk-styled card */
+.login-card--clerk {
+  max-width: 460px;
+}
+
+.login-card--clerk .cl-card { box-shadow: none !important; padding: 0 !important; }
+.login-card--clerk .cl-header { display: none !important; }

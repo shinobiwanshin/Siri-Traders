@@ -142,7 +142,19 @@ const Checkout = () => {
   };
 
   const finalizeOrder = async (addressForOrder, paymentDetails = {}) => {
-    const orderTotal = grandTotal;
+    const deliveryTime = getDeliveryTimeForAddress(addressForOrder);
+
+    // Require Clerk authentication for real order placement
+    let clerkToken = null;
+    if (typeof getToken === 'function') {
+      try { clerkToken = await getToken(); } catch { /* not signed in */ }
+    }
+
+    if (!clerkToken) {
+      alert('Please sign in to place an order.');
+      return;
+    }
+
     const orderItemsList = cartItems.map(item => ({
       productId: item.id,
       name: item.name,
@@ -153,67 +165,39 @@ const Checkout = () => {
     }));
 
     let finalOrderId = orderId;
-    if (getToken) {
-      try {
-        const token = await getToken();
-        
-        // 1. Call checkout endpoint
-        const checkoutRes = await fetch('/api/checkout', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            total: orderTotal,
-            items: orderItemsList
-          })
-        });
-        
-        if (!checkoutRes.ok) {
-          const errData = await checkoutRes.json();
-          alert(errData.error || 'Checkout failed');
-          return;
-        }
+    try {
+      const orderRes = await fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${clerkToken}`
+        },
+        body: JSON.stringify({
+          items: orderItemsList,
+          total: grandTotal,
+          deliveryAddress: `${addressForOrder.address}, ${addressForOrder.pincode}`,
+          paymentMethod: selectedPayment
+        })
+      });
 
-        // 2. Call place order endpoint
-        const orderRes = await fetch('/api/orders', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            items: orderItemsList,
-            total: orderTotal,
-            deliveryAddress: `${addressForOrder.address}, ${addressForOrder.pincode}`,
-            paymentMethod: selectedPayment
-          })
-        });
-
-        if (!orderRes.ok) {
-          const errData = await orderRes.json();
-          alert(errData.error || 'Failed to place order');
-          return;
-        }
-
-        const createdOrder = await orderRes.json();
-        if (createdOrder && createdOrder.id) {
-          finalOrderId = createdOrder.id;
-          setOrderId(createdOrder.id);
-        }
-      } catch (err) {
-        console.error("API error during checkout/order placement:", err);
-        alert('An error occurred during checkout. Please try again.');
+      if (!orderRes.ok) {
+        const err = await orderRes.json().catch(() => ({}));
+        alert(err.error || 'Failed to place order. Please try again.');
         return;
       }
+
+      const created = await orderRes.json();
+      if (created?.id) finalOrderId = created.id;
+    } catch {
+      alert('Network error. Please check your connection and try again.');
+      return;
     }
 
     const order = {
       id: finalOrderId,
       date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
       status: selectedPayment === 'cod' ? 'preparing' : 'paid',
-      deliveryTime: getDeliveryTimeForAddress(addressForOrder),
+      deliveryTime,
       payment: selectedPayment,
       address: addressForOrder,
       items: cartItems.map(item => ({ ...item, qty: item.quantity })),
