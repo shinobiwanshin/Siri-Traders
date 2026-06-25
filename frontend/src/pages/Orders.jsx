@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiPackage, FiChevronDown, FiChevronUp, FiRefreshCw, FiShoppingBag, FiNavigation } from 'react-icons/fi';
 import { useCart } from '../context/CartContext';
@@ -10,11 +10,48 @@ import './Orders.css';
 const Orders = () => {
   const navigate = useNavigate();
   const { addToCart } = useCart();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, getToken } = useAuth();
   const [expandedId, setExpandedId] = useState(null);
   const [reordered, setReordered] = useState(null);
+  const [dbOrders, setDbOrders] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  const orders = useMemo(() => {
+  useEffect(() => {
+    let active = true;
+    const fetchDbOrders = async () => {
+      if (isAuthenticated && getToken) {
+        setLoading(true);
+        try {
+          const token = await getToken();
+          const res = await fetch('/api/orders', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (active) {
+              setDbOrders(data);
+            }
+          } else {
+            if (active) {
+              setDbOrders([]);
+            }
+          }
+        } catch (err) {
+          console.error("Error fetching database orders:", err);
+        } finally {
+          if (active) {
+            setLoading(false);
+          }
+        }
+      }
+    };
+    fetchDbOrders();
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated, getToken]);
+
+  const localOrders = useMemo(() => {
     if (!isAuthenticated) return [];
     try {
       const saved = localStorage.getItem(getUserStorageKey(user, 'orders'));
@@ -24,6 +61,17 @@ const Orders = () => {
       return [];
     }
   }, [isAuthenticated, user]);
+
+  const orders = dbOrders.length > 0 ? dbOrders.map(order => ({
+    id: `ORD-${order.id}`,
+    date: order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recently',
+    status: order.status?.toLowerCase() || 'pending',
+    deliveryTime: 'Same day',
+    payment: order.paymentMethod || 'COD',
+    address: { address: order.deliveryAddress },
+    items: order.items || [],
+    total: order.total
+  })) : localOrders;
 
   const getStatusStyle = (status) => {
     switch (status) {

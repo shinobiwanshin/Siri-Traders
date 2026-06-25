@@ -2266,9 +2266,7 @@ export const baseProducts = [
   }
 ];
 
-const ADMIN_PRODUCTS_RETAIL_KEY = 'siri-admin-products-retail';
-const ADMIN_PRODUCTS_WHOLESALE_KEY = 'siri-admin-products-wholesale';
-const ADMIN_CATEGORIES_KEY = 'siri-admin-categories';
+export const ADMIN_PRODUCTS_KEY = 'siri-admin-products';
 
 const readAdminRetailProducts = () => {
   if (typeof localStorage === 'undefined') return [];
@@ -2286,7 +2284,7 @@ const readAdminWholesaleProducts = () => {
   } catch { return []; }
 };
 
-const mergeCatalog = (catalog, adminProducts = []) => {
+export const mergeCatalog = (catalog, adminProducts = []) => {
   const catalogById = new Map(catalog.map(p => [String(p.id), p]));
   const adminIds = new Set(adminProducts.map(p => String(p.id)));
   const normalizedAdmin = adminProducts.map(p => ({
@@ -2296,14 +2294,12 @@ const mergeCatalog = (catalog, adminProducts = []) => {
   return [...normalizedAdmin, ...catalog.filter(p => !adminIds.has(String(p.id)))];
 };
 
+/* ── Helper: build bulk variants for wholesale ── */
 const buildBulkVariants = (product) => {
-  if (product.variants?.some(v => /bag|can|case|crate|pack/i.test(v.label))) {
-    return product.variants;
-  }
-  const baseLabel = `${product.weight} ${product.unit}`.trim();
-  const baseVariant = product.variants?.[0] || { label: baseLabel, price: product.price };
-  const match = baseVariant.label.match(/([\d.]+)\s*(kg|l)\b/i);
+  const baseVariant = { label: `${product.weight} ${product.unit}`, price: product.price };
+  const match = product.weight.match(/^([\d.]+)\s*$/);
   if (!match) {
+    // If complex label, return defaults
     return [
       baseVariant,
       { label: 'Bulk pack', price: Math.max(1, Math.round(product.price * 8 * 0.92)) },
@@ -2311,7 +2307,7 @@ const buildBulkVariants = (product) => {
     ];
   }
   const amount = Number(match[1]);
-  const unit = match[2].toLowerCase();
+  const unit = product.unit.toLowerCase();
   const perUnit = baseVariant.price / amount;
   const fiveLabel = unit === 'kg' ? '5 kg bulk' : '5 L bulk';
   const tenLabel = unit === 'kg' ? '10 kg bulk' : '10 L bulk';
@@ -2322,7 +2318,7 @@ const buildBulkVariants = (product) => {
   ];
 };
 
-const toWholesaleProduct = (product) => {
+export const toWholesaleProduct = (product) => {
   const variants = buildBulkVariants(product);
   const bulkPrice = variants[variants.length - 1]?.price || product.price;
   return {

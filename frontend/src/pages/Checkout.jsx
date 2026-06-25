@@ -37,7 +37,7 @@ const getSavedAddresses = (user) => {
 
 const Checkout = () => {
   const { cartItems, cartTotal, cartCount, clearCart, requireAuth } = useCart();
-  const { location, user, isAuthenticated } = useAuth();
+  const { location, user, isAuthenticated, getToken } = useAuth();
   const navigate = useNavigate();
   const addressStorageKey = getUserStorageKey(user, 'addresses');
   const orderStorageKey = getUserStorageKey(user, 'orders');
@@ -52,7 +52,7 @@ const Checkout = () => {
   const [showItems, setShowItems] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [placedAddress, setPlacedAddress] = useState(null);
-  const [orderId] = useState(() => `ORD-${Date.now().toString().slice(-6)}`);
+  const [orderId, setOrderId] = useState(() => `ORD-${Date.now().toString().slice(-6)}`);
   const [addresses, setAddresses] = useState(() => getSavedAddresses(user));
   const [selectedAddressId, setSelectedAddressId] = useState(() => getSavedAddresses(user)[0]?.id || '');
   const [showAddressForm, setShowAddressForm] = useState(() => getSavedAddresses(user).length === 0);
@@ -141,10 +141,84 @@ const Checkout = () => {
     setAddressError('');
   };
 
-  const finalizeOrder = (addressForOrder, paymentDetails = {}) => {
-    const deliveryTime = getDeliveryTimeForAddress(addressForOrder);
+  const handlePlaceOrder = async () => {
+    let addressForOrder = selectedAddress;
+
+    if (showAddressForm || !addressForOrder) {
+      addressForOrder = saveAddress();
+    }
+
+    if (!addressForOrder) return;
+
+    const orderTotal = grandTotal;
+    const orderItemsList = cartItems.map(item => ({
+      productId: item.id,
+      name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+      weight: item.weight || '',
+      unit: item.unit || ''
+    }));
+
+    let finalOrderId = orderId;
+    if (getToken) {
+      try {
+        const token = await getToken();
+        
+        // 1. Call checkout endpoint
+        const checkoutRes = await fetch('/api/checkout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            total: orderTotal,
+            items: orderItemsList
+          })
+        });
+        
+        if (!checkoutRes.ok) {
+          const errData = await checkoutRes.json();
+          alert(errData.error || 'Checkout failed');
+          return;
+        }
+
+        // 2. Call place order endpoint
+        const orderRes = await fetch('/api/orders', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            items: orderItemsList,
+            total: orderTotal,
+            deliveryAddress: `${addressForOrder.address}, ${addressForOrder.pincode}`,
+            paymentMethod: selectedPayment
+          })
+        });
+
+        if (!orderRes.ok) {
+          const errData = await orderRes.json();
+          alert(errData.error || 'Failed to place order');
+          return;
+        }
+
+        const createdOrder = await orderRes.json();
+        if (createdOrder && createdOrder.id) {
+          finalOrderId = createdOrder.id;
+          setOrderId(createdOrder.id);
+        }
+      } catch (err) {
+        console.error("API error during checkout/order placement:", err);
+        alert('An error occurred during checkout. Please try again.');
+        return;
+      }
+    }
+
     const order = {
-      id: orderId,
+      id: finalOrderId,
       date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
       status: selectedPayment === 'cod' ? 'preparing' : 'paid',
       deliveryTime,

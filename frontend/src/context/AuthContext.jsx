@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect } from 'react';
+import { useUser, useClerk, useAuth as useClerkAuth } from '@clerk/clerk-react';
 
 const AuthContext = createContext();
 const ACCOUNTS_KEY = 'siri-traders-accounts';
@@ -27,7 +28,81 @@ export const useAuth = () => {
   return context;
 };
 
-export const AuthProvider = ({ children }) => {
+
+const ClerkAuthProvider = ({ children }) => {
+  const { user: clerkUser, isLoaded } = useUser();
+  const { signOut } = useClerk();
+  const { getToken } = useClerkAuth();
+
+  const [location, setLocation] = useState(() => {
+    try {
+      const saved = localStorage.getItem('siri-traders-location');
+      return saved ? JSON.parse(saved) : { address: 'Your address', city: '' };
+    } catch {
+      return { address: 'Your address', city: '' };
+    }
+  });
+
+  const [customerType, setCustomerType] = useState(() => {
+    try {
+      return localStorage.getItem('siri-traders-customer-type') || 'retail';
+    } catch {
+      return 'retail';
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('siri-traders-location', JSON.stringify(location));
+  }, [location]);
+
+  useEffect(() => {
+    localStorage.setItem('siri-traders-customer-type', customerType);
+  }, [customerType]);
+
+  const user = clerkUser ? {
+    id: clerkUser.id,
+    name: clerkUser.fullName || clerkUser.username || clerkUser.primaryEmailAddress?.emailAddress?.split('@')[0] || 'User',
+    email: clerkUser.primaryEmailAddress?.emailAddress || '',
+    phone: clerkUser.primaryPhoneNumber?.phoneNumber || '',
+    avatar: clerkUser.imageUrl || null,
+    isAdmin: clerkUser.publicMetadata?.role === 'admin' || false
+  } : null;
+
+  const logout = () => signOut();
+
+  // Login and signup will be handled directly by Clerk components or hooks,
+  // but we can provide placeholders to avoid breaking any callers.
+  const login = () => {
+    console.warn("Using Clerk Auth: redirect to /login or /signup for authentication.");
+  };
+
+  const signup = () => {
+    console.warn("Using Clerk Auth: redirect to /login or /signup for authentication.");
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        isAuthenticated: !!clerkUser,
+        isLoaded,
+        login,
+        signup,
+        logout,
+        location,
+        setLocation,
+        customerType,
+        setCustomerType,
+        isClerk: true,
+        getToken
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+const LocalStorageAuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
     try {
       const saved = localStorage.getItem('siri-traders-user');
@@ -93,7 +168,6 @@ export const AuthProvider = ({ children }) => {
       return loggedInUser;
     }
 
-    // Phone login (OTP flow)
     const mockUser = {
       id: Date.now(),
       name: 'User',
@@ -132,16 +206,28 @@ export const AuthProvider = ({ children }) => {
       value={{
         user,
         isAuthenticated,
+        isLoaded: true,
         login,
         signup,
         logout,
         location,
         setLocation,
         customerType,
-        setCustomerType
+        setCustomerType,
+        isClerk: false
       }}
     >
       {children}
     </AuthContext.Provider>
   );
+};
+
+export const AuthProvider = ({ children }) => {
+  const hasClerk = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+
+  if (hasClerk) {
+    return <ClerkAuthProvider>{children}</ClerkAuthProvider>;
+  }
+
+  return <LocalStorageAuthProvider>{children}</LocalStorageAuthProvider>;
 };
