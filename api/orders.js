@@ -1,4 +1,4 @@
-import { db, orders, orderItems } from '../db/index.js';
+import { db, orders, orderItems, users } from '../db/index.js';
 import { eq } from 'drizzle-orm';
 import { createClerkClient } from '@clerk/backend';
 import { Ratelimit } from '@upstash/ratelimit';
@@ -66,34 +66,53 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Missing order details' });
       }
 
-      // Create order & order items in a transaction
-      const newOrder = await db.transaction(async (tx) => {
-        const orderResult = await tx.insert(orders).values({
-          userId,
-          total,
-          deliveryAddress: deliveryAddress || '',
-          paymentMethod: paymentMethod || 'COD',
-          status: 'Paid'
-        }).returning();
-
-        const insertedOrder = orderResult[0];
-
-        for (const item of items) {
-          await tx.insert(orderItems).values({
-            orderId: insertedOrder.id,
-            productId: item.productId || item.id,
-            name: item.name,
-            quantity: item.qty || item.quantity || 1,
-            price: item.price,
-            weight: item.weight || '',
-            unit: item.unit || ''
+      // Sync user data to DB to ensure we have a record
+      try {
+        const clerkUser = await clerk.users.getUser(userId);
+        const email = clerkUser.emailAddresses[0]?.emailAddress || '';
+        const name = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim();
+        const phone = clerkUser.phoneNumbers[0]?.phoneNumber || '';
+        
+        await db.insert(users)
+          .values({
+            id: userId,
+            email: email,
+            name: name,
+            phone: phone,
+          })
+          .onConflictDoUpdate({
+            target: users.id,
+            set: { email, name, phone, updatedAt: new Date() }
           });
-        }
+      } catch (err) {
+        console.warn("Failed to sync user data, proceeding with order anyway:", err.message);
+      }
 
-        return insertedOrder;
-      });
+      // Create order & order items (avoiding transactions which are unsupported in neon-http)
+      const orderResult = await db.insert(orders).values({
+        userId,
+        total,
+        deliveryAddress: deliveryAddress || '',
+        paymentMethod: paymentMethod || 'COD',
+        status: paymentMethod === 'cod' ? 'Preparing' : 'Paid'
+      }).returning();
 
-      return res.status(201).json(newOrder);
+      const insertedOrder = orderResult[0];
+
+      // Insert all items sequentially
+      for (const item of items) {
+        await db.insert(orderItems).values({
+          orderId: insertedOrder.id,
+          productId: item.productId || item.id,
+          name: item.name,
+          quantity: item.qty || item.quantity || 1,
+          price: item.price,
+          weight: item.weight || '',
+          unit: item.unit || ''
+        });
+      }
+
+      return res.status(201).json(insertedOrder);
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
