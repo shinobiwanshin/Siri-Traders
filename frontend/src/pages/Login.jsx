@@ -10,10 +10,6 @@ const Login = () => {
             <img src="/logo-mark.webp" alt="Siri Traders" className="login-card__logo-img" />
           </div>
         </div>
-        <div className="login-card__header">
-          <h2 className="login-card__title">Welcome Back</h2>
-          <p className="login-card__subtitle">Sign in to your Siri Traders account</p>
-        </div>
         <SignIn
           signUpUrl="/signup"
           forceRedirectUrl="/home"

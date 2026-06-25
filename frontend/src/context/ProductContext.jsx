@@ -20,7 +20,7 @@ export const ProductProvider = ({ children }) => {
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/products');
+      const res = await fetch('/api/products?limit=500');
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
       if (data && data.length > 0) {
